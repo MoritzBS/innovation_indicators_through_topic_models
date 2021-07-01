@@ -1,0 +1,120 @@
+# IMPORT MODULES and LIBRARIES
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
+from sklearn import metrics
+from tabula import read_pdf
+from tabula import convert_into
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+from gensim.models.coherencemodel import CoherenceModel
+
+# Tokenize in english or french
+import spacy
+
+from spacy.lang.en import English
+from spacy.lang.fr import French
+parser = English()
+
+def tokenize(text):
+    lda_tokens = []
+    tokens = parser(text)
+    for token in tokens:
+        if token.orth_.isspace():
+            continue
+        elif token.like_url:
+            lda_tokens.append('URL')
+        elif token.orth_.startswith('@'):
+            lda_tokens.append('SCREEN_NAME')
+        else:
+            lda_tokens.append(token.lower_)
+    return lda_tokens
+	
+# Import NLTK wordnet to find meaning of words, synonyms, antonyms
+import nltk
+nltk.download('wordnet')
+
+from nltk.corpus import wordnet as wn
+def get_lemma(word):
+    lemma = wn.morphy(word)
+    if lemma is None:
+        return word
+    else:
+        return lemma
+    
+from nltk.stem.wordnet import WordNetLemmatizer
+def get_lemma2(word):
+    return WordNetLemmatizer().lemmatize(word)
+	
+# Filtering STOPWORDS (for, the, and, etc.)
+nltk.download('stopwords')
+en_stop = set(nltk.corpus.stopwords.words('english'))
+fr_stop = set(nltk.corpus.stopwords.words('french'))
+
+# Define function to prepare for topic modelling
+def prepare_text_for_lda(text):
+    tokens = tokenize(text)
+    tokens = [token for token in tokens if len(token) > 4]
+    tokens = [token for token in tokens if token not in en_stop]
+    tokens = [token for token in tokens if token not in fr_stop]
+    tokens = [get_lemma(token) for token in tokens]
+    return tokens
+	
+# Open text data and read line by line and for each line, prepare text for LDA, then add to a list
+import random
+text_data = []
+with open('ENTER FILE NAME HERE.csv', encoding = 'UTF-8') as f:
+    for line in f:
+        tokens = prepare_text_for_lda(line)
+        if random.random() > .99:
+            print(tokens)
+            text_data.append(tokens)
+
+# LDA with Gensim
+# Create a dictionary from the data, then convert to bag-of-words corpus and save the dictionary and corpus for future use
+from gensim import corpora
+dictionary = corpora.Dictionary(text_data)
+corpus = [dictionary.doc2bow(text) for text in text_data]
+
+import pickle
+pickle.dump(corpus, open('corpus.pkl', 'wb'))
+dictionary.save('dictionary.gensim')
+
+# Find topics and print them
+import gensim
+NUM_TOPICS = 7
+ldamodel = gensim.models.ldamodel.LdaModel(corpus, num_topics = NUM_TOPICS, id2word=dictionary, passes=15, random_state=2)
+ldamodel.save('model5.gensim')
+
+topics = ldamodel.print_topics(num_words=6)
+for topic in topics:
+    print(topic)
+
+
+# Display results in an interactive way with pyLDAvis
+dictionary = gensim.corpora.Dictionary.load('dictionary.gensim')
+corpus = pickle.load(open('corpus.pkl', 'rb'))
+lda = gensim.models.ldamodel.LdaModel.load('model5.gensim')
+
+import pyLDAvis.gensim
+lda_display = pyLDAvis.gensim.prepare(lda, corpus, dictionary, sort_topics=False)
+pyLDAvis.display(lda_display)
+
+# Export pyLDAvis to HTML for later use
+import pyLDAvis.gensim
+p = pyLDAvis.gensim.prepare(lda, corpus, dictionary)
+pyLDAvis.save_html(p, 'Topic_Model_X_XXXX.html')
+
+# Compute Coherence Score using c_v
+coherence_model_lda = CoherenceModel(model=ldamodel, texts=text_data, dictionary=dictionary, coherence='c_v')
+coherence_lda = coherence_model_lda.get_coherence()
+print('\nCoherence Score: ', coherence_lda)
+
+# Compute Coherence Score using UMass
+coherence_model_lda = CoherenceModel(model=ldamodel, texts=text_data, dictionary=dictionary, coherence="u_mass")
+coherence_lda = coherence_model_lda.get_coherence()
+print('\nCoherence Score: ', coherence_lda)
