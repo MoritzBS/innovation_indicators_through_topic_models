@@ -13,7 +13,7 @@ from tabula import convert_into
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 from gensim.models.coherencemodel import CoherenceModel
 
-# Tokenize in english or french
+# Tokenize in English or French
 import spacy
 
 from spacy.lang.en import English
